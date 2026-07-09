@@ -1,205 +1,214 @@
-# Oracle Cloud ARM Capacity Solver
+# Polymarket Insider-Trading Detector
 
-Automatically provision Oracle Cloud Infrastructure (OCI) ARM instances when capacity becomes available, solving the "Out of Capacity" issue.
+On-chain surveillance tool that monitors political prediction markets on
+[Polymarket](https://polymarket.com) (Polygon) in real time and flags trading
+patterns consistent with insider activity — then alerts a human operator over
+Telegram. The goal is factual: watch public on-chain activity around
+politically sensitive markets and surface statistically suspicious behaviour
+for manual review.
 
-## Features
+![PHP](https://img.shields.io/badge/PHP-%3E%3D7.4-777BB4?logo=php&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.5-3178C6?logo=typescript&logoColor=white)
+![License](https://img.shields.io/badge/license-Proprietary-red)
 
-- 🚀 Automatically retries instance creation when capacity is available
-- 💪 Supports ARM Ampere A1 instances (4 OCPUs / 24GB RAM free tier)
-- 🔄 Tries multiple availability domains
-- 📝 Comprehensive logging
-- ⚙️ Configurable via environment variables
-- 🕐 Cron job ready for automated execution
+> **Private & proprietary.** This repository is not open source. See
+> [LICENSE](LICENSE).
 
-## Prerequisites
+## Table of contents
 
-- PHP 7.4 or higher
-- Composer
-- Oracle Cloud Infrastructure (OCI) account
-- OCI API key pair
+- [What it does](#what-it-does)
+- [How it works](#how-it-works)
+- [Tech stack](#tech-stack)
+- [Project structure](#project-structure)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Usage](#usage)
+- [Data sources](#data-sources)
+- [Architecture](#architecture)
+- [Security](#security)
+- [License](#license)
 
-## Quick Start
+## What it does
 
-### 1. Clone and Install
+The system listens to the Polymarket CTF Exchange contract on Polygon, profiles
+the wallets behind large trades, and scores each trade for "insider-like"
+signals — freshly funded wallets, funds routed through no-KYC swap services,
+suspicious timing relative to market resolution, coordinated clusters, and
+obfuscation. Trades that cross an alert threshold are pushed to a Telegram
+channel, alongside a live dashboard.
+
+It observes **public** blockchain and prediction-market data only. It is a
+signal-generation and triage aid for a human analyst, not an automated
+accusation engine.
+
+## How it works
+
+```
+blockchain event  →  pipeline  →  scoring engine  →  Telegram alert
+   (OrderFilled)      (filter &      (dimensions        (+ live
+                       profile)       A/B/C/F)           dashboard)
+```
+
+1. **Listen** — a WebSocket subscription to `OrderFilled` events on the CTF
+   Exchange contract.
+2. **Filter & profile** — each trade is filtered by size, then the maker wallet
+   is profiled (funding source, age, transaction count, DeFi footprint).
+3. **Score** — an immediate score is computed across several dimensions; a
+   deferred pass runs every few minutes to catch patterns that need history
+   (quick flips, false hedges, win rate on resolved markets, price spikes).
+4. **Cluster** — wallets funded from the same source are linked as potential
+   coordinated actors.
+5. **Alert** — trades above the threshold trigger a Telegram alert; a dashboard
+   message is edited in place with running statistics.
+
+## Tech stack
+
+| Layer                 | Technology                                             |
+| --------------------- | ------------------------------------------------------ |
+| Detection engine      | TypeScript (Node.js, `ts-node`)                        |
+| Blockchain access     | `ethers` v6, Alchemy Polygon WebSocket                 |
+| Wallet profiling      | PolygonScan (Etherscan-compatible) API                 |
+| Market discovery      | Polymarket Gamma API                                   |
+| Storage               | SQLite via `better-sqlite3` (WAL mode)                 |
+| Alerts                | Telegram Bot API                                       |
+| Historical backfill   | Dune Analytics (SQL, see `dune_queries.sql`)           |
+| Infra provisioner     | PHP (`index.php`) + Composer, Oracle Cloud (OCI) API   |
+
+## Project structure
+
+```
+.
+├── src/                     # TypeScript detection engine
+│   ├── index.ts             # Startup orchestration & schedulers
+│   ├── blockchainListener.ts# Alchemy WS listener (OrderFilled)
+│   ├── pipeline.ts          # Per-trade entry point (filter/profile/score)
+│   ├── polymarketAPI.ts     # Political-market discovery (Gamma API)
+│   ├── polygonscanAPI.ts    # Wallet profiling
+│   ├── scoringEngine.ts     # Immediate scoring (dimensions A/B/C/F)
+│   ├── deferredScoring.ts   # History-dependent scoring (every 5 min)
+│   ├── clusterAnalysis.ts   # Same-source funding clusters
+│   ├── priceTracker.ts      # Market price history
+│   ├── telegramBot.ts       # Alerts & live dashboard
+│   ├── database.ts          # SQLite schema & migrations
+│   └── constants.ts         # Known bridge/swap/CEX addresses
+├── index.php                # Oracle Cloud ARM provisioner (independent)
+├── dune_queries.sql         # Dune backfill / hypothesis-testing queries
+├── *.ts (root)              # Utility scripts (see Usage)
+├── .env.example             # Configuration template (no secrets)
+├── composer.json            # PHP dependencies
+└── package.json             # Node dependencies
+```
+
+## Installation
+
+Dependencies are **not** vendored. `node_modules/`, `vendor/`, `venv/`, and
+`data/` are gitignored, so you must install them yourself after cloning:
 
 ```bash
-git clone <repository-url>
-cd get-my-oracle-server
+# 1. TypeScript detection engine
+npm install
+
+# 2. PHP provisioner (optional — only if you use index.php)
 composer install
 ```
 
-### 2. Generate OCI API Key
+Requirements:
 
-1. Log into OCI Console
-2. Go to User Settings → API Keys
-3. Click "Add API Key"
-4. Download the private key (.pem file)
-5. Copy the configuration details
+- Node.js 18+ and npm
+- PHP 7.4+ and Composer (only for the OCI provisioner)
 
-### 3. Configure Environment
+## Configuration
+
+Copy the template and fill in your own values. **Never commit `.env`.**
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` with your OCI details:
+The detection engine reads the following variables (leave a key empty to run in
+degraded / dry mode):
+
+| Variable             | Purpose                                                       |
+| -------------------- | ------------------------------------------------------------- |
+| `ALCHEMY_API_KEY`    | Polygon WebSocket endpoint. Without it, real-time listening is disabled (dry mode). |
+| `ETHERSCAN_API_KEY`  | PolygonScan API key for wallet profiling. Without it, profiling is mocked. |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token used to deliver alerts and the dashboard.  |
+| `TELEGRAM_CHAT_ID`   | Target Telegram chat/channel ID for alerts.                   |
+
+The `OCI_*` variables in `.env.example` are only used by the PHP provisioner
+(`index.php`) and are unrelated to the detection engine.
+
+See [`.env.example`](.env.example) for the full, commented list.
+
+## Usage
+
+Detection engine:
 
 ```bash
-# Required OCI Configuration
-OCI_REGION=us-phoenix-1
-OCI_USER_ID=ocid1.user.oc1..aaaaaaa...
-OCI_TENANCY_ID=ocid1.tenancy.oc1..aaaaaaa...
-OCI_KEY_FINGERPRINT=12:34:56:78:90:ab:cd:ef...
-OCI_PRIVATE_KEY_FILENAME=/path/to/your/private_key.pem
+# Run in development (no build step, uses ts-node)
+npm start
 
-# Get these from browser dev tools during instance creation
-OCI_SUBNET_ID=ocid1.subnet.oc1..aaaaaaa...
-OCI_IMAGE_ID=ocid1.image.oc1..aaaaaaa...
-
-# Your SSH public key (no newlines!)
-OCI_SSH_PUBLIC_KEY="ssh-rsa AAAAB3NzaC1yc2EAAA... your-email@example.com"
+# Compile to dist/ and run the compiled output
+npm run build
+node dist/index.js
 ```
 
-### 4. Get Subnet and Image IDs
+On startup it initializes the SQLite database, discovers political markets,
+starts the blockchain listener, and schedules periodic refreshes. Alerts and a
+self-updating dashboard are posted to your Telegram chat. If no keys are
+provided, it initializes in dry mode and reports readiness without listening.
 
-1. Go to OCI Console → Compute → Instances → Create Instance
-2. Select ARM shape (VM.Standard.A1.Flex)
-3. Configure networking (uncheck "Assign public IP")
-4. Open browser dev tools → Network tab
-5. Click "Create" (will likely fail with "Out of Capacity")
-6. Find the `/instances` API call in dev tools
-7. Right-click → Copy as cURL
-8. Extract `subnetId` and `imageId` from the request data
+Utility scripts (run directly with `ts-node`):
 
-### 5. Run the Script
+```bash
+npx ts-node test_telegram.ts   # Verify Telegram connectivity
+npx ts-node list_samples.ts    # Inspect DB samples
+npx ts-node purge_db.ts        # Wipe the SQLite database
+```
+
+Historical backfill / hypothesis testing is done in Dune Analytics using the
+queries in [`dune_queries.sql`](dune_queries.sql) (large bets, wallet age at
+trade time, same-source funding clusters).
+
+Oracle Cloud provisioner (independent infrastructure helper):
 
 ```bash
 php index.php
 ```
 
-Expected output when no capacity:
-```json
-{
-    "code": "InternalError",
-    "message": "Out of host capacity."
-}
-```
+> There is no automated test suite and no lint configuration.
 
-## Configuration Options
+## Data sources
 
-### Instance Shapes
+- **Polymarket Gamma API** — discovers political prediction markets by keyword.
+- **Polygon (Alchemy)** — real-time `OrderFilled` events from the CTF Exchange.
+- **PolygonScan** — wallet history, funding source, and DeFi activity.
+- **Dune Analytics** — offline backfill and historical validation.
+- **Telegram** — human-facing alert delivery and dashboard.
 
-**ARM Ampere A1 (Free Tier - Default):**
-```bash
-OCI_SHAPE=VM.Standard.A1.Flex
-OCI_OCPUS=4
-OCI_MEMORY_IN_GBS=24
-```
+## Architecture
 
-**AMD x64 (Always Free Alternative):**
-```bash
-OCI_SHAPE=VM.Standard.E2.1.Micro
-OCI_OCPUS=1
-OCI_MEMORY_IN_GBS=1
-```
+The repository contains **two independent components**:
 
-### Advanced Options
+1. **TypeScript detection engine (`src/`)** — the core product. Data flows from
+   a blockchain event through the pipeline and scoring engine to a Telegram
+   alert. State lives in a local SQLite database (`wallets`, `trades`,
+   `clusters`, `monitored_markets`, `price_history`, `system_state`), created
+   automatically on first run.
 
-```bash
-# Maximum instances to create
-OCI_MAX_INSTANCES=1
+2. **PHP provisioner (`index.php`)** — a standalone Oracle Cloud helper that
+   polls the OCI API to create an ARM instance when free-tier capacity becomes
+   available. It shares no logic with the detection engine and is included only
+   as deployment infrastructure.
 
-# Specific availability domain (optional)
-OCI_AVAILABILITY_DOMAIN=FeVO:US-PHOENIX-1-AD-1
+## Security
 
-# Instance name prefix
-OCI_DISPLAY_NAME=my-oracle-server
-```
-
-## Automation with Cron
-
-### Setup Cron Job
-
-```bash
-# Create log file
-touch /path/to/get-my-oracle-server/oci.log
-chmod 777 /path/to/get-my-oracle-server/oci.log
-
-# Edit crontab
-crontab -e
-
-# Add line to run every 5 minutes
-*/5 * * * * /usr/bin/php /path/to/get-my-oracle-server/index.php >> /path/to/get-my-oracle-server/oci.log 2>&1
-```
-
-### Web-based Execution
-
-Move to web directory and access via browser:
-```bash
-sudo cp -r /path/to/get-my-oracle-server /var/www/html/
-curl http://localhost/get-my-oracle-server/index.php
-```
-
-## Success Output Example
-
-```json
-{
-    "id": "ocid1.instance.oc1.phx.abcd...",
-    "displayName": "oracle-arm-instance-20241201-123456",
-    "shape": "VM.Standard.A1.Flex",
-    "availabilityDomain": "FeVO:PHX-AD-1",
-    "lifecycleState": "PROVISIONING",
-    "shapeConfig": {
-        "ocpus": 4,
-        "memoryInGBs": 24
-    }
-}
-```
-
-## Connecting to Your Instance
-
-Once created, connect via SSH:
-
-```bash
-# With public IP
-ssh -i ~/.ssh/id_rsa opc@public.ip.address
-
-# With private IP (from another OCI instance)
-ssh -i ~/.ssh/id_rsa opc@instance-name.subnet.vcn.oraclevcn.com
-```
-
-## Troubleshooting
-
-### Common Errors
-
-**Private key not found:**
-```bash
-chmod 600 /path/to/private_key.pem
-```
-
-**Invalid SSH key:**
-- Ensure no newlines in `OCI_SSH_PUBLIC_KEY`
-- Use contents of `~/.ssh/id_rsa.pub` exactly
-
-**Permission denied:**
-```bash
-chmod 777 /path/to/private_key.pem
-```
-
-### Rate Limiting
-
-Avoid running more frequently than every 5 minutes to prevent API rate limiting.
-
-## Free Tier Limits
-
-- **ARM A1:** 4 OCPUs, 24GB RAM, 200GB storage
-- **AMD x64:** 1 OCPU, 1GB RAM, 100GB storage  
-- **Bandwidth:** 10TB outbound per month
-
-## Contributing
-
-Feel free to submit issues and pull requests.
+- Report vulnerabilities privately to **yohanmichau1@gmail.com** — see
+  [SECURITY.md](SECURITY.md).
+- Secrets belong in `.env` (gitignored). Only `.env.example` is tracked, and it
+  contains placeholders only.
+- Contribution conventions are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-MIT License
+Proprietary — All rights reserved, © 2026 Yohan Michau. See [LICENSE](LICENSE).
