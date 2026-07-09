@@ -136,7 +136,7 @@ export async function processTrade(tradeData: any) {
             `💰 Montant: $${Math.round(usdcSpent).toLocaleString()}\n` +
             `🚩 Flags: ${scoringResult.flags.join(', ')}`);
     } 
-    else if (scoringResult.score >= 40) { // Lowered to 40 per user request
+    else if (scoringResult.score >= 40) { // Baissé à 40 selon demande utilisateur
         detectedHighScores++;
         lastSuspiciousWallet = wallet;
         sendTelegramAlert(`⚠️ **ALERTE SUSPICION (Score: ${scoringResult.score})**\n` +

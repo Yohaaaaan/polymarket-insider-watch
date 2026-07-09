@@ -1,6 +1,6 @@
 // src/constants.ts
-// Non-exhaustive list of service addresses that can be used to obscure the origin of funds
-// on the Polygon blockchain (Mainnet).
+// Liste non-exhaustive d'adresses de services pouvant servir à masquer l'origine des fonds
+// sur la blockchain Polygon (Mainnet).
 
 export const KNOWN_ENTITIES: Record<string, { type: 'bridge' | 'swap_service' | 'cex' | 'dex', name: string }> = {
     // === PRIVACY SWAPS / NO KYC ===
