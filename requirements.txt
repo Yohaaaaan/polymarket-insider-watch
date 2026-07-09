@@ -1,0 +1,9 @@
+requests>=2.31.0
+python-dotenv>=1.0.1
+pyTelegramBotAPI>=4.18.0
+web3>=6.19.0
+pandas>=2.2.0
+sqlalchemy>=2.0.29
+axios-python-adapter>=0.1.0
+moment>=0.11.1
+BetterSQLite3-Wrapper>=0.0.1

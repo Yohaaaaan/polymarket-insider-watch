@@ -1,0 +1,223 @@
+Resolving Oracle Cloud “Out of Capacity” issue and getting free VPS with 4 ARM cores / 24GB of memory (using PHP)
+Alexander Hitrov
+Alexander Hitrov
+
+Follow
+7 min read
+·
+Jul 18, 2021
+112
+
+
+7
+
+
+
+
+
+
+Update 2024: The script is still functional, but many Reddit users now recommend upgrading to Pay As You Go (PAYG) for the best experience. With PAYG, you’ll continue to enjoy all the free benefits without any additional cost, but you’ll also receive priority for launching instances and are less likely to face “Out of host capacity” errors. Additionally, PAYG unlocks more types of OCI resources, including free Kubernetes-related infrastructure if that’s something you’re interested in. It’s important to set up budget alerts as a safety net and be mindful of the resources you deploy and their associated costs. This way, you can take full advantage of PAYG while keeping your spending in check.
+
+Very neat and useful configuration was recently announced at Oracle Cloud Infrastructure (OCI) blog as a part of Always Free tier. Sometimes it’s complicated to launch an instance due to the “Out of Capacity” error. Here we’re solving that issue as Oracle constantly adds capacity from time to time.
+
+Each tenancy gets the first 3,000 OCPU hours and 18,000 GB hours per month for free to create Ampere A1 Compute instances using the VM.Standard.A1.Flex shape (equivalent to 4 OCPUs and 24 GB of memory).
+This approach requires PHP 7.x or 8.x and composer installed and will call “LaunchInstance” OCI API endpoint. We’ll utilise the package which I’ve written (and published) some time ago, here’s the article.
+
+YouTube video instruction https://youtu.be/uzAqgjElc64 is a bit outdated regarding Configuration but still can be useful for the rest.
+
+If you prefer using OCI CLI instead, please refer to https://hitrov.medium.com/resolving-oracle-cloud-out-of-capacity-issue-and-getting-free-vps-with-4-arm-cores-24gb-of-a3d7e6a027a8
+
+Generating API key
+Please refer to my another article because despite the tool used (CLI or PHP) we need to have API key first.
+
+Installation
+Clone this repository :
+
+git clone https://github.com/hitrov/oci-arm-host-capacity.git
+run
+
+cd oci-arm-host-capacity/
+composer install
+Configuration
+Create/copy .env file
+
+Copy .env.example as .env
+
+cp .env.example .env
+You must modify .env file only. Don't push/share it as it possibly contains sensitive information.
+
+All parameters except OCI_AVAILABILITY_DOMAIN are mandatory to be set. Please read the comments in .env file as well.
+
+General
+
+Region, user, tenancy, fingerprint should be taken from textarea during API key generation step (refer to the beginning of this article). Adjust these values in .env file accordingly:
+
+OCI_REGION
+OCI_USER_ID
+OCI_TENANCY_ID
+OCI_KEY_FINGERPRINT
+Private key
+
+OCI_PRIVATE_KEY_FILENAME is an absolute path (including directories) or direct public accessible URL to your *.pem private key file.
+
+Instance parameters (mandatory)
+
+Now let’s get values for OCI_SUBNET_ID, OCI_IMAGE_ID
+
+You must start instance creation process from the OCI Console in the browser (Menu -> Compute -> Instances -> Create Instance)
+
+Change image and shape. For Always free AMD x64 — make sure that “Always Free Eligible” availabilityDomain label is there. ARMs can be created anywhere within your home region.
+
+Press enter or click to view image in full size
+
+Changing image and shape
+Adjust Networking section, set “Do not assign a public IPv4 address” checkbox. If you don’t have existing VNIC/subnet, please create VM.Standard.E2.1.Micro instance before doing everything.
+
+Press enter or click to view image in full size
+
+Networking
+“Add SSH keys” section does not matter for us right now. Before clicking “Create”…
+
+
+…open browser’s dev tools -> network tab. Click “Create” and wait a bit — most probably you’ll get “Out of capacity” error. Now find /instances API call (red one)…
+
+
+…and right click on it -> copy as curl. Paste the clipboard contents in any text editor and review the — data-binary parameter. Find subnetId, imageId and set OCI_SUBNET_ID, OCI_IMAGE_ID, respectively.
+
+Note availabilityDomain for yourself, then read the corresponding comment in .env file regarding OCI_AVAILABILITY_DOMAIN.
+
+OCI_SSH_PUBLIC_KEY (SSH access)
+
+In order to have secure shell (SSH) access to the instance you need to have a keypair, besically 2 files:
+
+~/.ssh/id_rsa
+~/.ssh/id_rsa.pub
+Second one (public key) contents (string) should be provided to a command below. The are plenty of tutorials on how to generate them (if you don’t have them yet), we won’t cover this part here.
+
+cat ~/.ssh/id_rsa.pub
+Output should be similar to
+
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFwZVQa+F41Jrb4X+p9gFMrrcAqh9ks8ATrcGRitK+R/ github.com@hitrov.com
+Change OCI_SSH_PUBLIC_KEY inside double quotes - paste the contents above (or you won't be able to login into the newly created instance). NB! No new lines allowed!
+
+Instance parameters (optional)
+
+OCI_OCPUS and OCI_MEMORY_IN_GBS are set 4 and 24 by default. Of course, you can safely adjust them. Possible values are 1/6, 2/12, 3/18 and 4/24, respectively. Please notice that "Oracle Linux Cloud Developer" image can be created with at least 8GB of RAM (OCI_MEMORY_IN_GBS).
+
+If for some reason your home region is running out of Always free AMD x64 (1/8 OPCU + 1GB RAM), replace values below. NB! Setting the OCI_AVAILABILITY_DOMAIN to Always Free Eligible is mandatory for non-ARM architecture!
+
+OCI_SHAPE=VM.Standard.E2.1.Micro
+OCI_OCPUS=1
+OCI_MEMORY_IN_GBS=1
+OCI_AVAILABILITY_DOMAIN=FeVO:EU-FRANKFURT-1-AD-2
+If you don’t have instances of selected shape at all, leave the value of OCI_MAX_INSTANCES=1. When you managed to launch one and need more, set to OCI_MAX_INSTANCES=2.
+
+Running the script
+php ./index.php
+I bet that the output (error) will be similar to the one in a browser a few minutes ago
+
+{
+    "code": "InternalError",
+    "message": "Out of host capacity."
+}
+or if you already have instances:
+
+{
+    "code": "LimitExceeded",
+    "message": "The following service limits were exceeded: standard-a1-memory-count, standard-a1-core-count. Request a service limit increase from the service limits page in the console. "
+}
+Periodic job setup (cron) — Linux / WSL
+
+You can now setup periodic job to run the command
+
+Create log file:
+
+touch /path/to/oci-arm-host-capacity/oci.log
+Set permissions for PHP script to modify it:
+
+chmod 777 /path/to/oci-arm-host-capacity/oci.log
+Get full path to PHP binary
+
+which php
+Usually that’s /usr/bin/php
+
+Setup itself:
+
+EDITOR=nano crontab -e
+Add new line to execute the script every 5 minutes and append log the output:
+
+*/5 * * * * /usr/bin/php /path/to/oci-arm-host-capacity/index.php >> /path/to/script.log
+To avoid the risk of being banned by Oracle due to frequently surpassing their API rate limit, I would advise against running it more frequently.
+
+NB! Use absolute paths wherever possible
+
+…and save the file (F2, press Y to confirm overwrite, then Enter).
+
+There could be cases when cron user won’t have some permissions, there’re ways to solve it:
+
+Setup job for root user by executing EDITOR=nano sudo crontab -e
+Move this directory (oci-arm-host-capacity) into web server's one e.g. /usr/share/nginx/html and setup cron this way:
+*/5 * * * * curl http://server.add.re.ss/oci-arm-host-capacity/index.php
+You can also visit the URL above and see the same command output as by running from the shell.
+
+GitHub actions (workflows)
+
+This part is covered in README
+
+How it works
+Before the instance creation, script will:
+
+Call ListAvailabilityDomains OCI API method
+Call ListInstances OCI API method and check whether there’re already existing instances with the same OCI_SHAPE, as well as number of them OCI_MAX_INSTANCES (you can safely adjust the last one if you wanna e.g. two VM.Standard.A1.Flex with 2/12 - 2 OCPUs and 12GB RAM - each).
+Script won’t create new instance if current (actual) number return from the API exceeds the one from OCI_MAX_INSTANCES variable.
+
+In case of success the JSON output will be similar to
+
+Press enter or click to view image in full size
+
+Launch success output #1
+Press enter or click to view image in full size
+
+Launch success output #2
+Troubleshooting
+Private key issues
+
+OCI_PRIVATE_KEY_FILENAME doesn't exist.
+PHP Fatal error:  Uncaught Hitrov\OCI\Exception\PrivateKeyFileNotFoundException: Private key file does not exist: /path/to/oracleidentitycloudservice_***-07-14-10-35.pem in /Users/hitrov/Sites/oci-arm-host-capacity/vendor/hitrov/oci-api-php-request-sign/src/Hitrov/OCI/Signer.php:346
+Make sure path is absolute (full including directories), you should see it’s content by executing:
+
+cat /path/to/oracleidentitycloudservice_***-07-14-10-35.pem
+If that’s URL make sure it’s inside double quotes, and opens without redirections or additional actions:
+
+curl "https://url.to/oracleidentitycloudservice_***-07-14-10-35.pem"
+Permission denied — private key file is inaccessible for this PHP script:
+PHP Warning:  file_get_contents(/path/to/oracleidentitycloudservice_***-07-14-10-35.pem): failed to open stream: Permission denied in /Users/hitrov/Sites/oci-arm-host-capacity/vendor/hitrov/oci-api-php-request-sign/src/Hitrov/OCI/Signer.php on line 225
+PHP Fatal error:  Uncaught TypeError: Return value of Hitrov\OCI\Signer::getPrivateKey() must be of the type string or null, bool returned in /Users/hitrov/Sites/oci-arm-host-capacity/vendor/hitrov/oci-api-php-request-sign/src/Hitrov/OCI/Signer.php:225
+Fastest way to resolve:
+
+chmod 777 /path/to/oracleidentitycloudservice_***-07-14-10-35.pem
+SSH key issues
+
+If you have new line(s) / line ending(s) in OCI_SSH_PUBLIC_KEYyou will encounter:
+{
+  "code": "InvalidParameter",
+  "message": "Unable to parse message body"
+}
+If public key is incorrect:
+{
+    "code": "InvalidParameter",
+    "message": "Invalid ssh public key; must be in base64 format"
+}
+Copy the proper contents of ~/.ssh/id_rsa.pub again and make sure it's inside double quotes. Or re-generate pair of keys. Make sure you won't unintentionally overwrite your existing ones.
+
+Assigning public IP address
+Please refer to appropriate section of my another article.
+
+Conclusion
+That’s how you will login when instance will be created (notice opc default username)
+
+ssh -i ~/.ssh/id_rsa opc@ip.add.re.ss
+If you didn’t assign public IP, you can still copy internal FQDN or private IP (10.x.x.x) from the instance details page and connect from your other instance in the same VNIC. e.g.
+
+ssh -i ~/.ssh/id_rsa opc@instance-20210714-xxxx.subnet.vcn.oraclevcn.com
+Thanks for reading!

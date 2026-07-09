@@ -1,0 +1,14 @@
+# secrets
+.env
+*.key
+*.pem
+# deps / build
+node_modules/
+vendor/
+venv/
+dist/
+# data & logs
+data/
+*.log
+oci.log
+__pycache__/

@@ -1,0 +1,27 @@
+{
+    "name": "oracle-cloud/arm-capacity-solver",
+    "description": "Automatically provision Oracle Cloud ARM instances when capacity becomes available",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": ">=7.4",
+        "hitrov/oci-api-php-request-sign": "^1.0",
+        "vlucas/phpdotenv": "^5.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "OracleArmCapacity\\": "src/"
+        }
+    },
+    "scripts": {
+        "provision": "php index.php"
+    },
+    "authors": [
+        {
+            "name": "Oracle ARM Capacity Solver",
+            "email": "noreply@example.com"
+        }
+    ],
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
