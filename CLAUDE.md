@@ -7,7 +7,7 @@ code in this repository.
 
 Polymarket insider-trading detection system. Monitors political prediction
 markets on Polymarket (Polygon blockchain) for suspicious trading patterns and
-alerts via Telegram. Despite the directory name (`traquer_politiciens_corrompus`),
+alerts via Telegram. The project is named `polymarket-insider-watch`;
 this is a blockchain-analytics tool, not a politician database.
 
 ## Stack
