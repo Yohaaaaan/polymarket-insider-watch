@@ -10,8 +10,8 @@ const CHAIN_ID = '137';
 export async function runClusterAnalysis() {
     console.log("Running cluster analysis sweep...");
 
-    // Heuristiques 4 & 5: Trouver des wallets créés presqu'en même temps,
-    // qui parient sur le même marché dans le même sens, avec des montants similaires.
+    // Heuristics 4 & 5: Find wallets created at almost the same time,
+    // that bet on the same market in the same direction, with similar amounts.
     
     // We compare pairs of trades on the exact same token outcome
     const query = `
@@ -102,7 +102,7 @@ function applyClusterScore(wallet: string, points: number) {
 }
 
 /**
- * H3: Destination commune des gains.
+ * H3: Common destination of the gains.
  * For all suspect wallets (score >= 35), check their outgoing USDC transfers.
  * If multiple wallets send gains to the same third-party address, cluster them.
  */

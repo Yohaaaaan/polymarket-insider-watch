@@ -1,7 +1,7 @@
 -- Polymarket Insider Trading Detection - Dune Analytics Queries
--- Utilisation du Free Tier Dune pour backfill et tester historiquement l'hypothèse
+-- Using the Dune Free Tier to backfill and test the hypothesis historically
 
--- Query 1: Trouver les gros paris (USDC > $10k) sur les marchés conditionnels
+-- Query 1: Find the large bets (USDC > $10k) on conditional markets
 SELECT 
   t.maker as wallet_address,
   t.evt_block_time,
@@ -14,7 +14,7 @@ WHERE t.takerAmountFilled / 1e6 > 10000
 ORDER BY t.evt_block_time DESC
 LIMIT 1000;
 
--- Query 2: Identifier l'âge du portefeuille au moment du pari (Détection d'insider ad-hoc)
+-- Query 2: Identify the wallet's age at the time of the bet (ad-hoc insider detection)
 WITH wallet_first_tx AS (
   SELECT "from" as tx_from, MIN(block_time) as first_tx
   FROM polygon.transactions
@@ -30,11 +30,11 @@ SELECT
 FROM polymarket.CTFExchange_evt_OrderFilled p
 JOIN wallet_first_tx w ON w.tx_from = p.maker
 WHERE p.takerAmountFilled / 1e6 > 10000 
-  AND date_diff('day', w.first_tx, p.evt_block_time) < 14 -- Portefeuilles créés < 14 jours avant le trade
+  AND date_diff('day', w.first_tx, p.evt_block_time) < 14 -- Wallets created < 14 days before the trade
 ORDER BY wallet_age_at_trade_days ASC
 LIMIT 100;
 
--- Query 3: Cluster Finder (Trouver les adresses financées par le même wallet source)
+-- Query 3: Cluster Finder (Find the addresses funded by the same source wallet)
 WITH funded_by_source AS (
   SELECT 
     "to", 

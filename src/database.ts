@@ -37,14 +37,14 @@ db.exec(`
     implied_prob  REAL,
     block_ts      INTEGER,
     score         INTEGER,
-    flags         TEXT    -- JSON array des flags déclenchés
+    flags         TEXT    -- JSON array of triggered flags
   );
 
   CREATE TABLE IF NOT EXISTS clusters (
     cluster_id    INTEGER PRIMARY KEY AUTOINCREMENT,
     wallet_a      TEXT,
     wallet_b      TEXT,
-    reason        TEXT,   -- heuristique déclenchée
+    reason        TEXT,   -- triggered heuristic
     confidence    REAL,
     detected_ts   INTEGER
   );
